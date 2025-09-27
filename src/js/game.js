@@ -140,6 +140,9 @@ class FingerPickGame {
         this.playBtn.addEventListener('click', () => this.resetGame());
         this.settingsBtn.addEventListener('click', () => this.navigateToSettings());
         
+        // Test button for debugging (temporary) - disabled for production
+        // this.addTestButton();
+        
         // Prevent context menu on long press
         this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     }
@@ -647,56 +650,191 @@ class FingerPickGame {
     
     showRandomImage() {
         console.log('showRandomImage chamado');
-        console.log('Lendo imagens da pasta assets/images...');
+        console.log('Carregando configuração de imagens...');
         
-        // Try to read images from the folder
-        this.readImagesFromFolder();
+        // Load images using configuration file
+        this.loadImagesFromConfig();
     }
     
-    async readImagesFromFolder() {
+    async loadImagesFromConfig() {
+        try {
+            // Tentar carregar configuração
+            console.log('Tentando carregar images-config.json...');
+            const configResponse = await fetch('src/assets/images-config.json');
+            console.log('Response status:', configResponse.status);
+            console.log('Response ok:', configResponse.ok);
+            
+            if (configResponse.ok) {
+                const config = await configResponse.json();
+                console.log('Configuração carregada:', config);
+                
+                // Gerar imagem aleatória baseada na configuração
+                const randomImage = this.generateRandomImageFromConfig(config);
+                console.log('Imagem gerada:', randomImage);
+                
+                // Testar se a imagem existe
+                console.log('Testando se imagem existe:', randomImage);
+                const exists = await this.testImageExists(randomImage);
+                console.log('Imagem existe?', exists);
+                
+                if (exists) {
+                    console.log('Imagem encontrada, exibindo modal');
+                    this.createImageModal(randomImage);
+                } else {
+                    console.log('Imagem não encontrada, tentando fallback');
+                    this.loadImagesWithFallback(config);
+                }
+            } else {
+                console.log('Erro ao carregar configuração:', configResponse.status);
+                console.log('Tentando fallback direto...');
+                this.loadImagesWithFallback({
+                    totalImages: 3,
+                    basePath: 'src/assets/images/',
+                    filenamePattern: 'img',
+                    extension: 'jpg',
+                    startNumber: 0
+                });
+            }
+        } catch (error) {
+            console.log('Erro ao carregar configuração:', error);
+            console.log('Tentando fallback direto...');
+            this.loadImagesWithFallback({
+                totalImages: 3,
+                basePath: 'src/assets/images/',
+                filenamePattern: 'img',
+                extension: 'jpg',
+                startNumber: 0
+            });
+        }
+    }
+    
+    generateRandomImageFromConfig(config) {
+        const { totalImages, basePath, filenamePattern, extension, startNumber } = config;
+        
+        // Gerar número aleatório entre startNumber e totalImages
+        const randomNumber = Math.floor(Math.random() * totalImages) + startNumber;
+        
+        // Construir caminho da imagem
+        const imagePath = `${basePath}${filenamePattern}${randomNumber}.${extension}`;
+        
+        console.log(`Gerando imagem: ${imagePath} (número aleatório: ${randomNumber})`);
+        return imagePath;
+    }
+    
+    async loadImagesWithFallback(config) {
+        console.log('Iniciando loadImagesWithFallback com config:', config);
+        const { totalImages, basePath, filenamePattern, extension, startNumber } = config;
         const basePaths = [
-            'src/assets/images/',
-            '../assets/images/',
-            '../../assets/images/',
-            'assets/images/',
-            '/src/assets/images/'
+            '', // Caminho relativo atual
+            '../', // Um nível acima
+            '../../', // Dois níveis acima
+            '/', // Caminho absoluto
+            './' // Caminho relativo explícito
         ];
         
-        const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+        const availableImages = [];
         
-        for (const basePath of basePaths) {
-            console.log('Tentando ler pasta:', basePath);
-            
-            try {
-                // Try to fetch the directory
-                const response = await fetch(basePath);
-                console.log('Response status:', response.status);
+        console.log('Testando imagens de', startNumber, 'até', totalImages);
+        
+        // Testar cada combinação de basePath + imagem
+        for (const basePathPrefix of basePaths) {
+            console.log('Testando basePathPrefix:', basePathPrefix);
+            for (let i = startNumber; i < startNumber + totalImages; i++) {
+                const imagePath = `${basePathPrefix}${basePath}${filenamePattern}${i}.${extension}`;
+                console.log('Testando caminho:', imagePath);
                 
-                if (response.ok) {
-                    const html = await response.text();
-                    console.log('HTML recebido, tamanho:', html.length);
-                    
-                    // Extract image files from HTML
-                    const imageList = this.extractImagesFromHTML(html, basePath);
-                    console.log('Imagens extraídas:', imageList);
-                    
-                    if (imageList.length > 0) {
-                        // Select random image
-                        const randomIndex = Math.floor(Math.random() * imageList.length);
-                        const selectedImage = imageList[randomIndex];
-                        console.log('Imagem selecionada:', selectedImage);
-                        this.createImageModal(selectedImage);
-                        return;
+                try {
+                    const exists = await this.testImageExists(imagePath);
+                    console.log(`Imagem ${imagePath} existe?`, exists);
+                    if (exists) {
+                        availableImages.push(imagePath);
+                        console.log('Imagem encontrada:', imagePath);
                     }
-                } else {
-                    console.log('Erro ao acessar pasta:', response.status);
+                } catch (error) {
+                    console.log('Erro ao testar imagem:', imagePath, error);
                 }
-            } catch (error) {
-                console.log('Erro ao ler pasta:', basePath, error);
             }
         }
         
-        console.log('Nenhuma imagem encontrada na pasta');
+        console.log('Imagens disponíveis encontradas:', availableImages);
+        
+        if (availableImages.length > 0) {
+            // Selecionar imagem aleatória das disponíveis
+            const randomIndex = Math.floor(Math.random() * availableImages.length);
+            const selectedImage = availableImages[randomIndex];
+            console.log('Imagem selecionada do fallback:', selectedImage);
+            this.createImageModal(selectedImage);
+        } else {
+            console.log('Nenhuma imagem encontrada - exibindo mensagem padrão');
+            this.showDefaultMessage();
+        }
+    }
+    
+    showDefaultMessage() {
+        // Criar modal com mensagem padrão quando não há imagens
+        const modal = document.createElement('div');
+        modal.className = 'image-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease;
+        `;
+        
+        const messageContainer = document.createElement('div');
+        messageContainer.style.cssText = `
+            text-align: center;
+            color: white;
+            font-size: 1.5rem;
+            padding: 2rem;
+        `;
+        messageContainer.innerHTML = `
+            <div style="font-size: 4rem; margin-bottom: 1rem;">🎉</div>
+            <div>Parabéns ao vencedor!</div>
+            <div style="font-size: 1rem; margin-top: 1rem; opacity: 0.8;">Clique para fechar</div>
+        `;
+        
+        modal.appendChild(messageContainer);
+        document.body.appendChild(modal);
+        
+        // Auto-close after 3 seconds
+        setTimeout(() => {
+            if (modal.parentNode) modal.remove();
+        }, 3000);
+        
+        // Close on click
+        modal.onclick = () => modal.remove();
+    }
+    
+    addTestButton() {
+        // Adicionar botão de teste temporário para debug
+        const testBtn = document.createElement('button');
+        testBtn.textContent = '🧪 Testar Imagem';
+        testBtn.style.cssText = `
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        `;
+        testBtn.onclick = () => {
+            console.log('Botão de teste clicado');
+            this.showRandomImage();
+        };
+        document.body.appendChild(testBtn);
     }
     
     extractImagesFromHTML(html, basePath) {

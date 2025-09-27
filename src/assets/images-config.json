@@ -1,0 +1,8 @@
+{
+  "totalImages": 3,
+  "basePath": "src/assets/images/",
+  "filenamePattern": "img",
+  "extension": "jpg",
+  "startNumber": 0,
+  "description": "Configuração das imagens do jogo Finger Pick"
+}
