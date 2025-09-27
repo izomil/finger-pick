@@ -659,36 +659,23 @@ class FingerPickGame {
     async loadImagesFromConfig() {
         try {
             // Tentar carregar configuração
-            console.log('Tentando carregar images-config.json...');
-            const configResponse = await fetch('src/assets/images-config.json');
-            console.log('Response status:', configResponse.status);
-            console.log('Response ok:', configResponse.ok);
+            const configResponse = await fetch(`src/assets/images-config.json?t=${Date.now()}`);
             
             if (configResponse.ok) {
                 const config = await configResponse.json();
-                console.log('Configuração carregada:', config);
+                console.log('JSON carregado:', config.totalImages, 'imagens');
                 
                 // Gerar imagem aleatória baseada na configuração
                 const randomImage = this.generateRandomImageFromConfig(config);
-                console.log('Imagem gerada:', randomImage);
+                const success = await this.tryLoadImageWithFallback(randomImage);
                 
-                // Testar se a imagem existe
-                console.log('Testando se imagem existe:', randomImage);
-                const exists = await this.testImageExists(randomImage);
-                console.log('Imagem existe?', exists);
-                
-                if (exists) {
-                    console.log('Imagem encontrada, exibindo modal');
-                    this.createImageModal(randomImage);
-                } else {
-                    console.log('Imagem não encontrada, tentando fallback');
+                if (!success) {
                     this.loadImagesWithFallback(config);
                 }
             } else {
-                console.log('Erro ao carregar configuração:', configResponse.status);
-                console.log('Tentando fallback direto...');
+                console.log('Erro ao carregar JSON, usando fallback com 13 imagens');
                 this.loadImagesWithFallback({
-                    totalImages: 3,
+                    totalImages: 13,
                     basePath: 'src/assets/images/',
                     filenamePattern: 'img',
                     extension: 'jpg',
@@ -696,10 +683,9 @@ class FingerPickGame {
                 });
             }
         } catch (error) {
-            console.log('Erro ao carregar configuração:', error);
-            console.log('Tentando fallback direto...');
+            console.log('Erro ao carregar JSON, usando fallback com 13 imagens');
             this.loadImagesWithFallback({
-                totalImages: 3,
+                totalImages: 13,
                 basePath: 'src/assets/images/',
                 filenamePattern: 'img',
                 extension: 'jpg',
@@ -717,13 +703,11 @@ class FingerPickGame {
         // Construir caminho da imagem
         const imagePath = `${basePath}${filenamePattern}${randomNumber}.${extension}`;
         
-        console.log(`Gerando imagem: ${imagePath} (número aleatório: ${randomNumber})`);
+        console.log(`Gerando imagem: ${imagePath}`);
         return imagePath;
     }
     
-    async loadImagesWithFallback(config) {
-        console.log('Iniciando loadImagesWithFallback com config:', config);
-        const { totalImages, basePath, filenamePattern, extension, startNumber } = config;
+    async tryLoadImageWithFallback(imagePath) {
         const basePaths = [
             '', // Caminho relativo atual
             '../', // Um nível acima
@@ -732,40 +716,33 @@ class FingerPickGame {
             './' // Caminho relativo explícito
         ];
         
-        const availableImages = [];
-        
-        console.log('Testando imagens de', startNumber, 'até', totalImages);
-        
-        // Testar cada combinação de basePath + imagem
+        // Tentar cada caminho base
         for (const basePathPrefix of basePaths) {
-            console.log('Testando basePathPrefix:', basePathPrefix);
-            for (let i = startNumber; i < startNumber + totalImages; i++) {
-                const imagePath = `${basePathPrefix}${basePath}${filenamePattern}${i}.${extension}`;
-                console.log('Testando caminho:', imagePath);
-                
-                try {
-                    const exists = await this.testImageExists(imagePath);
-                    console.log(`Imagem ${imagePath} existe?`, exists);
-                    if (exists) {
-                        availableImages.push(imagePath);
-                        console.log('Imagem encontrada:', imagePath);
-                    }
-                } catch (error) {
-                    console.log('Erro ao testar imagem:', imagePath, error);
+            const fullPath = basePathPrefix + imagePath;
+            
+            try {
+                const exists = await this.testImageExists(fullPath);
+                if (exists) {
+                    console.log(`Imagem encontrada: ${fullPath}`);
+                    this.createImageModal(fullPath);
+                    return true;
                 }
+            } catch (error) {
+                // Silenciar erros de teste de imagem
             }
         }
         
-        console.log('Imagens disponíveis encontradas:', availableImages);
+        return false;
+    }
+    
+    async loadImagesWithFallback(config) {
+        // Gerar uma imagem aleatória baseada na configuração
+        const randomImage = this.generateRandomImageFromConfig(config);
         
-        if (availableImages.length > 0) {
-            // Selecionar imagem aleatória das disponíveis
-            const randomIndex = Math.floor(Math.random() * availableImages.length);
-            const selectedImage = availableImages[randomIndex];
-            console.log('Imagem selecionada do fallback:', selectedImage);
-            this.createImageModal(selectedImage);
-        } else {
-            console.log('Nenhuma imagem encontrada - exibindo mensagem padrão');
+        // Tentar carregar a imagem aleatória
+        const success = await this.tryLoadImageWithFallback(randomImage);
+        
+        if (!success) {
             this.showDefaultMessage();
         }
     }
@@ -836,6 +813,7 @@ class FingerPickGame {
         };
         document.body.appendChild(testBtn);
     }
+    
     
     extractImagesFromHTML(html, basePath) {
         const imageList = [];
