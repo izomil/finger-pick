@@ -31,6 +31,7 @@ class FingerPickGame {
         this.selectionIndex = 0; // Current finger being highlighted
         this.selectionSpeed = 200; // Speed of selection animation (ms)
         this.originalCountdownTime = 5; // Store original countdown time for selection animation
+        this.imageShown = false; // Flag to prevent multiple images
         this.colors = [
             '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff',
             '#00ffff', '#ff8000', '#8000ff', '#ff0080', '#80ff00',
@@ -608,6 +609,14 @@ class FingerPickGame {
     showWinnerImage() {
         console.log('Mostrando imagem do vencedor');
         
+        // Prevent multiple images from being shown
+        if (this.imageShown) {
+            console.log('Imagem já foi exibida - ignorando chamada duplicada');
+            return;
+        }
+        
+        this.imageShown = true;
+        
         // Clear the winner check interval
         if (this.winnerCheckInterval) {
             clearInterval(this.winnerCheckInterval);
@@ -815,8 +824,16 @@ class FingerPickGame {
     createImageModal(imageUrl) {
         console.log('createImageModal chamado com:', imageUrl);
         
+        // Check if modal already exists and remove it
+        const existingModal = document.querySelector('.image-modal');
+        if (existingModal) {
+            console.log('Removendo modal existente');
+            existingModal.remove();
+        }
+        
         // Create modal for image
         const modal = document.createElement('div');
+        modal.className = 'image-modal'; // Add class for easy identification
         modal.style.cssText = `
             position: fixed;
             top: 0;
@@ -941,6 +958,7 @@ class FingerPickGame {
         this.gameState = 'waiting';
         this.fingers = [];
         this.visualFingers = [];
+        this.imageShown = false; // Reset image flag
         
         // Reload settings to get current countdown time
         this.loadSettings();
