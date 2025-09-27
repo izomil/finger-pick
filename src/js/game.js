@@ -1,30 +1,112 @@
 class FingerPickGame {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
+        if (!this.canvas) {
+            console.error('Canvas não encontrado!');
+            return;
+        }
         this.ctx = this.canvas.getContext('2d');
-        this.resetBtn = document.getElementById('resetBtn');
+        this.playBtn = document.getElementById('playBtn');
+        this.settingsBtn = document.getElementById('settingsBtn');
         this.countdownEl = document.getElementById('countdown');
         this.winnerEl = document.getElementById('winner');
-        this.countdownTimeSelect = document.getElementById('countdownTime');
+        
+        console.log('Elementos encontrados:', {
+            canvas: !!this.canvas,
+            playBtn: !!this.playBtn,
+            settingsBtn: !!this.settingsBtn,
+            countdownEl: !!this.countdownEl,
+            winnerEl: !!this.winnerEl
+        });
         
         this.fingers = [];
+        this.visualFingers = []; // Visual markings that persist during selection
         this.gameState = 'waiting'; // waiting, counting, finished
         this.countdownValue = 5;
         this.countdownInterval = null;
         this.minFingersToStart = 2; // Mínimo de dedos para iniciar
+        this.showImage = true; // Whether to show image at the end
+        this.winnerCheckInterval = null;
+        this.selectionAnimation = null; // Animation for selecting winner
+        this.selectionIndex = 0; // Current finger being highlighted
+        this.selectionSpeed = 200; // Speed of selection animation (ms)
+        this.originalCountdownTime = 5; // Store original countdown time for selection animation
         this.colors = [
-            '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57',
-            '#ff9ff3', '#54a0ff', '#5f27cd', '#00d2d3', '#ff9f43',
-            '#10ac84', '#ee5a24', '#0984e3', '#6c5ce7', '#a29bfe'
+            '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff',
+            '#00ffff', '#ff8000', '#8000ff', '#ff0080', '#80ff00',
+            '#0080ff', '#ff4000', '#4000ff', '#ff0040', '#40ff00',
+            '#0040ff', '#ff2000', '#2000ff', '#ff0020', '#20ff00'
         ];
         
+        this.loadSettings();
         this.init();
+        
+        // Disable play button initially
+        if (this.playBtn) {
+            this.playBtn.disabled = true;
+        }
+    }
+    
+    loadSettings() {
+        // Load settings from URL parameters or localStorage
+        const urlParams = new URLSearchParams(window.location.search);
+        const storedSettings = this.getStoredSettings();
+        
+        this.countdownValue = parseInt(urlParams.get('countdownTime')) || 
+                             parseInt(storedSettings.countdownTime) || 5;
+        this.originalCountdownTime = this.countdownValue; // Store original time
+        // Get showImage from URL params or localStorage
+        const urlShowImage = urlParams.get('showImage');
+        const storedShowImage = storedSettings.showImage;
+        
+        // Default to true if not specified
+        this.showImage = (urlShowImage === 'true') || 
+                        (urlShowImage === null && storedShowImage !== false) ||
+                        (storedShowImage === true);
+        
+        console.log('Settings loaded:', {
+            countdownTime: this.countdownValue,
+            showImage: this.showImage,
+            urlShowImage: urlShowImage,
+            storedShowImage: storedShowImage,
+            finalShowImage: this.showImage
+        });
+    }
+    
+    getStoredSettings() {
+        try {
+            const stored = localStorage.getItem('fingerPickSettings');
+            return stored ? JSON.parse(stored) : {};
+        } catch (error) {
+            console.error('Error loading settings:', error);
+            return {};
+        }
     }
     
     init() {
         this.setupCanvas();
         this.setupEventListeners();
+        this.setupCanvasHelpers();
         this.draw();
+    }
+    
+    setupCanvasHelpers() {
+        // Add roundRect support for older browsers
+        if (!this.ctx.roundRect) {
+            this.ctx.roundRect = function(x, y, width, height, radius) {
+                this.beginPath();
+                this.moveTo(x + radius, y);
+                this.lineTo(x + width - radius, y);
+                this.quadraticCurveTo(x + width, y, x + width, y + radius);
+                this.lineTo(x + width, y + height - radius);
+                this.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+                this.lineTo(x + radius, y + height);
+                this.quadraticCurveTo(x, y + height, x, y + height - radius);
+                this.lineTo(x, y + radius);
+                this.quadraticCurveTo(x, y, x + radius, y);
+                this.closePath();
+            };
+        }
     }
     
     setupCanvas() {
@@ -32,7 +114,7 @@ class FingerPickGame {
         const updateCanvasSize = () => {
             const container = this.canvas.parentElement;
             const maxWidth = Math.min(container.clientWidth - 40, 600);
-            const maxHeight = Math.min(window.innerHeight * 0.6, 500);
+            const maxHeight = Math.min(window.innerHeight * 0.7, 600); // Increased from 0.6 to 0.7 and 500 to 600
             
             this.canvas.width = maxWidth;
             this.canvas.height = maxHeight;
@@ -54,7 +136,8 @@ class FingerPickGame {
         this.canvas.addEventListener('mousedown', (e) => this.handleMouse(e));
         
         // Button events
-        this.resetBtn.addEventListener('click', () => this.resetGame());
+        this.playBtn.addEventListener('click', () => this.resetGame());
+        this.settingsBtn.addEventListener('click', () => this.navigateToSettings());
         
         // Prevent context menu on long press
         this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -62,8 +145,9 @@ class FingerPickGame {
     
     handleTouch(e) {
         e.preventDefault();
+        console.log('Touch detectado:', e.changedTouches.length, 'dedos');
         
-        // Allow adding fingers during counting, but not during finished state
+        // Allow adding fingers during counting and selecting, but not during finished state
         if (this.gameState === 'finished') return;
         
         const rect = this.canvas.getBoundingClientRect();
@@ -73,21 +157,28 @@ class FingerPickGame {
             const x = touch.clientX - rect.left;
             const y = touch.clientY - rect.top;
             
+            console.log(`Touch: x=${x}, y=${y}, canvas=${this.canvas.width}x${this.canvas.height}`);
+            
             // Check if touch is within canvas bounds
             if (x >= 0 && x <= this.canvas.width && y >= 0 && y <= this.canvas.height) {
                 this.addFinger(x, y, touch.identifier);
+            } else {
+                console.log('Touch fora do canvas');
             }
         });
     }
     
     handleMouse(e) {
-        // Allow adding fingers during counting, but not during finished state
+        console.log('Mouse detectado');
+        
+        // Allow adding fingers during counting and selecting, but not during finished state
         if (this.gameState === 'finished') return;
         
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         
+        console.log(`Mouse: x=${x}, y=${y}`);
         this.addFinger(x, y, 'mouse');
     }
     
@@ -103,7 +194,8 @@ class FingerPickGame {
             color,
             radius: 45,
             pulseRadius: 0,
-            isWinner: false
+            isWinner: false,
+            isSelected: false
         };
         
         this.fingers.push(finger);
@@ -115,6 +207,7 @@ class FingerPickGame {
         }
         
         // Auto-start logic
+        console.log(`Dedo adicionado. Total: ${this.fingers.length}, Estado: ${this.gameState}`);
         this.checkAutoStart();
         
         // If we're counting and someone adds a finger, just continue counting
@@ -189,6 +282,30 @@ class FingerPickGame {
                 this.showWinnerImage();
             }
             
+            // During counting phase, handle finger removal
+            if (this.gameState === 'counting') {
+                console.log('Dedo removido durante contagem');
+                
+                // If less than 2 fingers left, pause countdown and show waiting message
+                if (this.fingers.length < this.minFingersToStart) {
+                    console.log(`${this.fingers.length} dedo(s) restante(s) - pausando contagem`);
+                    this.pauseCountdown();
+                    return;
+                }
+                
+                // If 2+ fingers, continue normally
+                console.log(`${this.fingers.length} dedos restantes - continuando contagem`);
+                return;
+            }
+            
+            // During selection animation, keep finger markings but allow removal
+            if (this.gameState === 'selecting') {
+                console.log('Dedo removido durante seleção - mantendo marcação');
+                // Keep the finger marking on screen even if finger is removed
+                // Don't actually remove from fingers array during selection
+                return; // Exit early to prevent game logic interference
+            }
+            
             // Check if we need to pause or continue
             this.checkAutoStart();
             
@@ -200,14 +317,23 @@ class FingerPickGame {
     }
     
     checkAutoStart() {
+        console.log(`checkAutoStart: Estado=${this.gameState}, Dedos=${this.fingers.length}, Mínimo=${this.minFingersToStart}`);
+        
         if (this.gameState === 'waiting') {
             // Start countdown if we have enough fingers
             if (this.fingers.length >= this.minFingersToStart) {
+                console.log('Iniciando jogo automaticamente');
                 this.startGame();
             }
         } else if (this.gameState === 'counting') {
-            // Pause countdown if we don't have enough fingers
-            if (this.fingers.length < this.minFingersToStart) {
+            // If countdown is paused and we have enough fingers, restart
+            if (!this.countdownInterval && this.fingers.length >= this.minFingersToStart) {
+                console.log('Reiniciando contagem - dedos suficientes');
+                this.restartCountdown();
+            }
+            // If countdown is running but we don't have enough fingers, pause
+            else if (this.countdownInterval && this.fingers.length < this.minFingersToStart) {
+                console.log('Pausando contagem - poucos dedos');
                 this.pauseCountdown();
             }
         }
@@ -220,7 +346,7 @@ class FingerPickGame {
         // If we're in counting state but countdown is paused (no interval running)
         if (this.gameState === 'counting' && !this.countdownInterval && this.fingers.length >= this.minFingersToStart) {
             console.log('Reiniciando contagem após pausa');
-            this.resumeCountdown();
+            this.restartCountdown();
         }
     }
     
@@ -229,7 +355,7 @@ class FingerPickGame {
         this.countdownEl.classList.add('hidden');
         
         // Restart countdown from the beginning
-        this.countdownValue = parseInt(this.countdownTimeSelect.value);
+        // Countdown time is already loaded from settings
         this.startCountdown();
     }
     
@@ -239,34 +365,73 @@ class FingerPickGame {
             this.countdownInterval = null;
         }
         
-        this.countdownEl.textContent = '⏸️ Aguardando jogadores...';
-        this.countdownEl.classList.remove('hidden');
+        // Hide HTML countdown, show pause message on canvas
+        this.countdownEl.classList.add('hidden');
+        
+        console.log('Contagem pausada - mostrando "Aguardando jogadores"');
         
         // Ensure the display is updated
         this.draw();
     }
     
+    restartCountdown() {
+        if (this.countdownInterval) {
+            clearInterval(this.countdownInterval);
+            this.countdownInterval = null;
+        }
+        
+        // Reset countdown to original value
+        this.countdownValue = this.originalCountdownTime;
+        
+        console.log(`Contagem reiniciada: ${this.countdownValue} segundos`);
+        
+        // Restart countdown
+        this.startCountdown();
+    }
+    
+    stopCountdown() {
+        if (this.countdownInterval) {
+            clearInterval(this.countdownInterval);
+            this.countdownInterval = null;
+        }
+        
+        // Reset game state to waiting
+        this.gameState = 'waiting';
+        
+        console.log('Contagem parada - voltando para estado de espera');
+        
+        // Update display
+        this.draw();
+    }
+    
     startGame() {
+        console.log(`startGame: Dedos=${this.fingers.length}, Mínimo=${this.minFingersToStart}`);
+        
         if (this.fingers.length < this.minFingersToStart) {
+            console.log('Não há dedos suficientes para iniciar');
             return; // Not enough fingers
         }
         
+        console.log('Iniciando contagem com', this.countdownValue, 'segundos');
         this.gameState = 'counting';
-        this.resetBtn.disabled = false;
+        this.playBtn.disabled = false;
         
-        // Get countdown time from settings
-        this.countdownValue = parseInt(this.countdownTimeSelect.value);
+        // Countdown time is already loaded from settings
         
         this.startCountdown();
     }
     
     startCountdown() {
-        this.countdownEl.textContent = this.countdownValue;
-        this.countdownEl.classList.remove('hidden');
+        // Hide the HTML countdown element
+        this.countdownEl.classList.add('hidden');
+        
+        console.log(`Primeira contagem iniciada: ${this.countdownValue} segundos`);
         
         this.countdownInterval = setInterval(() => {
             this.countdownValue--;
-            this.countdownEl.textContent = this.countdownValue;
+            
+            // Redraw to show countdown on canvas
+            this.draw();
             
             if (this.countdownValue <= 0) {
                 this.endGame();
@@ -276,29 +441,131 @@ class FingerPickGame {
     
     endGame() {
         clearInterval(this.countdownInterval);
-        this.gameState = 'finished';
+        this.gameState = 'selecting'; // New state for selection animation
         
-        // Select random winner
-        const winnerIndex = Math.floor(Math.random() * this.fingers.length);
-        const winner = this.fingers[winnerIndex];
+        console.log('Primeira contagem terminada - iniciando animação de seleção...');
+        console.log(`Dedos atuais: ${this.fingers.length}`);
+        
+        // Copy fingers to visualFingers for persistent markings
+        this.visualFingers = [...this.fingers];
+        
+        // Reset countdown to half the original time for selection phase
+        this.countdownValue = Math.ceil(this.originalCountdownTime / 2);
+        
+        // Start selection animation
+        this.startSelectionAnimation();
+    }
+    
+    startSelectionAnimation() {
+        // Calculate selection duration (half of original countdown time)
+        const selectionDuration = (this.originalCountdownTime * 1000) / 2; // Half the original countdown time in ms
+        const totalSteps = Math.floor(selectionDuration / this.selectionSpeed);
+        
+        console.log(`Segunda contagem (seleção): ${selectionDuration}ms, ${totalSteps} passos, tempo original: ${this.originalCountdownTime}s`);
+        
+        this.selectionIndex = 0;
+        let step = 0;
+        
+        // Start countdown for selection phase
+        this.countdownInterval = setInterval(() => {
+            this.countdownValue--;
+            if (this.countdownValue <= 0) {
+                clearInterval(this.countdownInterval);
+                this.countdownInterval = null;
+            }
+        }, 1000);
+        
+        this.selectionAnimation = setInterval(() => {
+            // Clear previous selection
+            this.visualFingers.forEach(finger => {
+                finger.isSelected = false;
+            });
+            
+            // Highlight current finger (only if there are visual fingers left)
+            if (this.visualFingers.length > 0) {
+                // Adjust selection index if it's out of bounds
+                if (this.selectionIndex >= this.visualFingers.length) {
+                    this.selectionIndex = 0;
+                }
+                this.visualFingers[this.selectionIndex].isSelected = true;
+                
+                // Move to next finger
+                this.selectionIndex = (this.selectionIndex + 1) % this.visualFingers.length;
+            } else {
+                // If no visual fingers left, just continue the animation
+                console.log('Nenhum dedo visual restante durante animação');
+            }
+            
+            step++;
+            
+            // Redraw canvas
+            this.draw();
+            
+            // End selection animation
+            if (step >= totalSteps) {
+                this.endSelectionAnimation();
+            }
+        }, this.selectionSpeed);
+    }
+    
+    endSelectionAnimation() {
+        clearInterval(this.selectionAnimation);
+        this.selectionAnimation = null;
+        
+        // Check if there are any visual fingers left
+        if (this.visualFingers.length === 0) {
+            console.log('Nenhum dedo visual restante - reiniciando jogo');
+            this.gameState = 'waiting';
+            this.draw();
+            return;
+        }
+        
+        // Select random winner from visual fingers
+        const winnerIndex = Math.floor(Math.random() * this.visualFingers.length);
+        const winner = this.visualFingers[winnerIndex];
         winner.isWinner = true;
         
-        console.log('Jogo terminado, vencedor selecionado:', winner);
+        // Clear selection from all visual fingers
+        this.visualFingers.forEach(finger => {
+            finger.isSelected = false;
+        });
         
-        // Remove all fingers except the winner
+        console.log('Vencedor selecionado:', winner, 'de', this.visualFingers.length, 'dedos visuais');
+        
+        // Change state to finished
+        this.gameState = 'finished';
+        
+        // Keep only the winner in visualFingers
+        this.visualFingers = [winner];
+        
+        // Also update fingers array for consistency
         this.fingers = [winner];
         
-        // Hide countdown, show winner
+        // Enable play button for new game
+        this.playBtn.disabled = false;
+        
+        // Hide countdown
         this.countdownEl.classList.add('hidden');
         this.showWinner(winner);
         
-        // Add event listener for winner finger removal
-        this.setupWinnerRemovalListener(winner);
+        // Show image only if checkbox is checked
+        console.log('Checkbox showImage:', this.showImage);
+        console.log('Tipo do showImage:', typeof this.showImage);
+        if (this.showImage) {
+            console.log('Mostrando imagem do vencedor imediatamente');
+            this.showWinnerImage();
+        } else {
+            console.log('Checkbox desmarcado - não exibindo nada');
+            // Don't show anything when checkbox is unchecked
+        }
         
         // Haptic feedback for winner
         if (navigator.vibrate) {
             navigator.vibrate([100, 50, 100]);
         }
+        
+        // Final draw
+        this.draw();
     }
     
     setupWinnerRemovalListener(winner) {
@@ -315,12 +582,8 @@ class FingerPickGame {
     }
     
     showWinner(winner) {
-        this.winnerEl.innerHTML = `
-            <div style="color: ${winner.color}; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">
-                🎉 DEDO VENCEDOR! 🎉
-            </div>
-        `;
-        this.winnerEl.classList.remove('hidden');
+        // Winner is now only shown visually on the canvas
+        // No text message displayed
         
         // Add celebration animation
         this.startCelebration();
@@ -351,22 +614,208 @@ class FingerPickGame {
             this.winnerCheckInterval = null;
         }
         
-        // Hide the winner message
-        this.winnerEl.classList.add('hidden');
+        // Winner message is no longer shown
         
-        // Show random final image
-        if (window.SupabaseConfig && window.SupabaseConfig.showFinalImage) {
-            console.log('Chamando showFinalImage');
-            window.SupabaseConfig.showFinalImage();
+        // Only show image if enabled in settings
+        console.log('showWinnerImage - showImage:', this.showImage);
+        if (this.showImage) {
+            console.log('Exibindo imagem aleatória local');
+            this.showRandomImage();
         } else {
-            console.log('SupabaseConfig não disponível, usando fallback');
-            // Fallback: show a simple celebration
-            this.showFallbackCelebration();
+            console.log('Imagem desabilitada nas configurações');
+            // Don't show anything when image is disabled
         }
     }
     
-    showFallbackCelebration() {
-        // Create a simple celebration modal
+    
+    showRandomImage() {
+        console.log('showRandomImage chamado');
+        console.log('Lendo imagens da pasta assets/images...');
+        
+        // Try to read images from the folder
+        this.readImagesFromFolder();
+    }
+    
+    async readImagesFromFolder() {
+        const basePaths = [
+            'src/assets/images/',
+            '../assets/images/',
+            '../../assets/images/',
+            'assets/images/',
+            '/src/assets/images/'
+        ];
+        
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+        
+        for (const basePath of basePaths) {
+            console.log('Tentando ler pasta:', basePath);
+            
+            try {
+                // Try to fetch the directory
+                const response = await fetch(basePath);
+                console.log('Response status:', response.status);
+                
+                if (response.ok) {
+                    const html = await response.text();
+                    console.log('HTML recebido, tamanho:', html.length);
+                    
+                    // Extract image files from HTML
+                    const imageList = this.extractImagesFromHTML(html, basePath);
+                    console.log('Imagens extraídas:', imageList);
+                    
+                    if (imageList.length > 0) {
+                        // Select random image
+                        const randomIndex = Math.floor(Math.random() * imageList.length);
+                        const selectedImage = imageList[randomIndex];
+                        console.log('Imagem selecionada:', selectedImage);
+                        this.createImageModal(selectedImage);
+                        return;
+                    }
+                } else {
+                    console.log('Erro ao acessar pasta:', response.status);
+                }
+            } catch (error) {
+                console.log('Erro ao ler pasta:', basePath, error);
+            }
+        }
+        
+        console.log('Nenhuma imagem encontrada na pasta');
+    }
+    
+    extractImagesFromHTML(html, basePath) {
+        const imageList = [];
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+        
+        // Parse HTML to find image files
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const links = doc.querySelectorAll('a[href]');
+        
+        console.log('Links encontrados no HTML:', links.length);
+        
+        links.forEach(link => {
+            const href = link.getAttribute('href');
+            if (href && !href.includes('/') && !href.startsWith('.')) {
+                // Check if it's an image file
+                const extension = href.toLowerCase().substring(href.lastIndexOf('.'));
+                if (imageExtensions.includes(extension)) {
+                    const fullPath = basePath + href;
+                    imageList.push(fullPath);
+                    console.log('Imagem encontrada:', fullPath);
+                }
+            }
+        });
+        
+        return imageList;
+    }
+    
+    async discoverImages() {
+        const basePaths = [
+            'src/assets/images/',
+            '../assets/images/',
+            '../../assets/images/',
+            'assets/images/',
+            '/src/assets/images/'
+        ];
+        
+        for (const basePath of basePaths) {
+            console.log('Tentando base path:', basePath);
+            
+            try {
+                // Try to get directory listing
+                console.log('Fazendo fetch para:', basePath);
+                const response = await fetch(basePath);
+                console.log('Response status:', response.status, response.statusText);
+                
+                if (response.ok) {
+                    const html = await response.text();
+                    console.log('HTML recebido (primeiros 500 chars):', html.substring(0, 500));
+                    const imageList = this.parseImageList(html, basePath);
+                    console.log('Lista de imagens extraída:', imageList);
+                    
+                    if (imageList.length > 0) {
+                        console.log('Imagens encontradas:', imageList);
+                        // Select random image
+                        const randomIndex = Math.floor(Math.random() * imageList.length);
+                        const selectedImage = imageList[randomIndex];
+                        console.log('Imagem selecionada:', selectedImage);
+                        this.createImageModal(selectedImage);
+                        return;
+                    } else {
+                        console.log('Nenhuma imagem encontrada no HTML');
+                    }
+                } else {
+                    console.log('Response não OK:', response.status, response.statusText);
+                }
+            } catch (error) {
+                console.log('Erro ao acessar diretório:', basePath, error);
+            }
+        }
+        
+        console.log('Nenhuma imagem encontrada na pasta assets/images');
+        // Don't show anything if no images found
+    }
+    
+    parseImageList(html, basePath) {
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+        const imageList = [];
+        
+        // Parse HTML to find image files
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const links = doc.querySelectorAll('a[href]');
+        
+        links.forEach(link => {
+            const href = link.getAttribute('href');
+            if (href && !href.includes('/') && !href.startsWith('.')) {
+                // Check if it's an image file
+                const extension = href.toLowerCase().substring(href.lastIndexOf('.'));
+                if (imageExtensions.includes(extension)) {
+                    imageList.push(basePath + href);
+                }
+            }
+        });
+        
+        return imageList;
+    }
+    
+    async testImageExists(imagePath) {
+        return new Promise((resolve) => {
+            // First check if image is in cache
+            if ('caches' in window) {
+                caches.match(imagePath).then((cachedResponse) => {
+                    if (cachedResponse) {
+                        console.log('Imagem encontrada no cache:', imagePath);
+                        resolve(true);
+                        return;
+                    }
+                    
+                    // If not in cache, test by loading the image
+                    const testImg = new Image();
+                    testImg.onload = () => {
+                        console.log('Imagem encontrada na rede:', imagePath);
+                        resolve(true);
+                    };
+                    testImg.onerror = () => {
+                        console.log('Imagem não encontrada:', imagePath);
+                        resolve(false);
+                    };
+                    testImg.src = imagePath;
+                });
+            } else {
+                // Fallback for browsers without cache API
+                const testImg = new Image();
+                testImg.onload = () => resolve(true);
+                testImg.onerror = () => resolve(false);
+                testImg.src = imagePath;
+            }
+        });
+    }
+    
+    createImageModal(imageUrl) {
+        console.log('createImageModal chamado com:', imageUrl);
+        
+        // Create modal for image
         const modal = document.createElement('div');
         modal.style.cssText = `
             position: fixed;
@@ -374,7 +823,7 @@ class FingerPickGame {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.9);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -382,32 +831,62 @@ class FingerPickGame {
             animation: fadeIn 0.3s ease;
         `;
         
-        const content = document.createElement('div');
-        content.style.cssText = `
+        const imageContainer = document.createElement('div');
+        imageContainer.style.cssText = `
+            max-width: 90%;
+            max-height: 90%;
             text-align: center;
-            color: white;
-            font-size: 2rem;
+        `;
+        
+        const img = document.createElement('img');
+        img.src = imageUrl;
+        img.style.cssText = `
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
             animation: scaleIn 0.5s ease;
         `;
-        content.innerHTML = `
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🎉</div>
-            <div>Parabéns ao vencedor!</div>
-            <div style="font-size: 1.2rem; margin-top: 1rem; opacity: 0.8;">
-                Clique para fechar
-            </div>
-        `;
         
-        modal.appendChild(content);
+        img.onload = () => {
+            console.log('Imagem carregada com sucesso no modal:', imageUrl);
+        };
+        
+        img.onerror = () => {
+            console.error('Erro ao carregar imagem no modal:', imageUrl);
+            modal.remove();
+        };
+        
+        imageContainer.appendChild(img);
+        
+        const closeText = document.createElement('div');
+        closeText.style.cssText = `
+            color: white;
+            font-size: 1.2rem;
+            margin-top: 1rem;
+            opacity: 0.8;
+        `;
+        closeText.textContent = 'Clique para fechar';
+        
+        imageContainer.appendChild(img);
+        imageContainer.appendChild(closeText);
+        modal.appendChild(imageContainer);
         document.body.appendChild(modal);
         
-        // Auto-close after 3 seconds
+        console.log('Modal criado e adicionado ao DOM');
+        
+        // Auto-close after 5 seconds
         setTimeout(() => {
             if (modal.parentNode) modal.remove();
-        }, 3000);
+        }, 5000);
         
         // Close on click
-        modal.onclick = () => modal.remove();
+        modal.onclick = () => {
+            console.log('Modal clicado - removendo');
+            modal.remove();
+        };
     }
+    
     
     startCelebration() {
         const celebrationDuration = 3000;
@@ -440,16 +919,48 @@ class FingerPickGame {
     }
     
     resetGame() {
+        console.log('Resetando jogo...');
+        
+        // Clear any running intervals
+        if (this.countdownInterval) {
+            clearInterval(this.countdownInterval);
+            this.countdownInterval = null;
+        }
+        
+        if (this.winnerCheckInterval) {
+            clearInterval(this.winnerCheckInterval);
+            this.winnerCheckInterval = null;
+        }
+        
+        if (this.selectionAnimation) {
+            clearInterval(this.selectionAnimation);
+            this.selectionAnimation = null;
+        }
+        
+        // Reset game state
         this.gameState = 'waiting';
         this.fingers = [];
-        this.countdownValue = parseInt(this.countdownTimeSelect.value);
+        this.visualFingers = [];
         
-        this.resetBtn.disabled = true;
+        // Reload settings to get current countdown time
+        this.loadSettings();
         
+        this.playBtn.disabled = true;
+        
+        // Hide all UI elements
         this.countdownEl.classList.add('hidden');
-        this.winnerEl.classList.add('hidden');
         
+        // Clear any winner image if showing
+        if (window.SupabaseConfig && window.SupabaseConfig.hideFinalImage) {
+            window.SupabaseConfig.hideFinalImage();
+        }
+        
+        console.log('Jogo resetado. Tempo configurado:', this.countdownValue, 'segundos');
         this.draw();
+    }
+    
+    navigateToSettings() {
+        window.location.href = 'settings.html';
     }
     
     draw() {
@@ -460,12 +971,21 @@ class FingerPickGame {
         this.drawBackground();
         
         // Draw fingers
-        this.fingers.forEach(finger => {
+        const fingersToDraw = this.gameState === 'selecting' ? this.visualFingers : this.fingers;
+        fingersToDraw.forEach(finger => {
             this.drawFinger(finger);
         });
         
-        // Draw instructions if no fingers
-        if (this.fingers.length === 0) {
+        // Draw countdown or instructions
+        if (this.gameState === 'counting' && this.countdownInterval) {
+            // Only show countdown if countdown is actually running
+            this.drawCountdown();
+        } else if (this.gameState === 'selecting') {
+            // Don't show countdown during selection phase
+            // Only show the selection animation on fingers
+        } else if (this.gameState === 'waiting' && this.fingers.length < this.minFingersToStart && this.fingers.length > 0) {
+            this.drawWaitingMessage();
+        } else if (this.fingers.length === 0) {
             this.drawInstructions();
         }
     }
@@ -492,7 +1012,7 @@ class FingerPickGame {
     }
     
     drawFinger(finger) {
-        const { x, y, color, radius, pulseRadius, isWinner } = finger;
+        const { x, y, color, radius, pulseRadius, isWinner, isSelected } = finger;
         
         // Draw outer glow for winner
         if (isWinner) {
@@ -500,6 +1020,17 @@ class FingerPickGame {
             this.ctx.shadowBlur = 30;
         } else {
             this.ctx.shadowBlur = 0;
+        }
+        
+        // Draw selection animation (rotating border)
+        if (isSelected && this.gameState === 'selecting') {
+            this.ctx.strokeStyle = '#ff6b6b';
+            this.ctx.lineWidth = 4;
+            this.ctx.setLineDash([10, 5]);
+            this.ctx.beginPath();
+            this.ctx.arc(x, y, radius + 10, 0, Math.PI * 2);
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
         }
         
         // Draw pulse ring
@@ -556,6 +1087,115 @@ class FingerPickGame {
         
         // Reset shadow
         this.ctx.shadowBlur = 0;
+    }
+    
+    drawCountdown() {
+        // Draw countdown in the center of the canvas
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        
+        // Background circle for countdown
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        this.ctx.beginPath();
+        this.ctx.arc(centerX, centerY, 100, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        // Pulsing effect
+        const pulse = Math.sin(Date.now() * 0.01) * 0.1 + 0.9;
+        this.ctx.globalAlpha = pulse;
+        this.ctx.strokeStyle = '#ff6b6b';
+        this.ctx.lineWidth = 6;
+        this.ctx.beginPath();
+        this.ctx.arc(centerX, centerY, 100, 0, Math.PI * 2);
+        this.ctx.stroke();
+        this.ctx.globalAlpha = 1;
+        
+        // Countdown number
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = 'bold 96px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(this.countdownValue.toString(), centerX, centerY);
+        
+        // Shadow effect for better visibility
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        this.ctx.shadowBlur = 10;
+        this.ctx.shadowOffsetX = 2;
+        this.ctx.shadowOffsetY = 2;
+        this.ctx.fillText(this.countdownValue.toString(), centerX, centerY);
+        
+        // Reset shadow
+        this.ctx.shadowBlur = 0;
+        this.ctx.shadowOffsetX = 0;
+        this.ctx.shadowOffsetY = 0;
+    }
+    
+    drawSelectionCountdown() {
+        // Draw selection countdown in the center of the canvas
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        
+        // Background circle for selection countdown
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        this.ctx.beginPath();
+        this.ctx.arc(centerX, centerY, 100, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        // Pulsing effect with different color
+        const pulse = Math.sin(Date.now() * 0.01) * 0.1 + 0.9;
+        this.ctx.globalAlpha = pulse;
+        this.ctx.strokeStyle = '#4ecdc4';
+        this.ctx.lineWidth = 6;
+        this.ctx.beginPath();
+        this.ctx.arc(centerX, centerY, 100, 0, Math.PI * 2);
+        this.ctx.stroke();
+        this.ctx.globalAlpha = 1;
+        
+        // Selection countdown number (use current countdownValue)
+        const selectionTime = this.countdownValue;
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = 'bold 96px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(selectionTime.toString(), centerX, centerY);
+        
+        // Shadow effect for better visibility
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        this.ctx.shadowBlur = 10;
+        this.ctx.shadowOffsetX = 2;
+        this.ctx.shadowOffsetY = 2;
+        this.ctx.fillText(selectionTime.toString(), centerX, centerY);
+        
+        // Reset shadow
+        this.ctx.shadowBlur = 0;
+        this.ctx.shadowOffsetX = 0;
+        this.ctx.shadowOffsetY = 0;
+    }
+    
+    drawWaitingMessage() {
+        // Draw waiting message in the center
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        
+        // Background with rounded corners
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        this.ctx.beginPath();
+        this.ctx.roundRect(centerX - 180, centerY - 25, 360, 50, 25);
+        this.ctx.fill();
+        
+        // Border
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.roundRect(centerX - 180, centerY - 25, 360, 50, 25);
+        this.ctx.stroke();
+        
+        // Message
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = 'bold 22px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText('⏸️ Aguardando jogadores...', centerX, centerY);
     }
     
     drawInstructions() {

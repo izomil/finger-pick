@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finger Pick 🎮 - Configurações</title>
+    <meta name="description" content="Configure seu jogo Finger Pick">
+    <meta name="theme-color" content="#6366f1">
+    
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="../../public/manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Finger Pick">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="../css/styles.css">
+    <link rel="stylesheet" href="../css/settings.css">
+    
+    <!-- Icons -->
+    <link rel="apple-touch-icon" href="../assets/icons/icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="../assets/icons/icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="../assets/icons/icon-512x512.png">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <h1>🎮 Finger Pick</h1>
+            <p>Configure seu jogo e divirta-se!</p>
+        </header>
+
+        <!-- Settings Area -->
+        <main class="settings-area">
+            <!-- Game Settings -->
+            <div class="settings-section">
+                <h2>⚙️ Configurações do Jogo</h2>
+                
+                <div class="setting-item">
+                    <label for="countdownTime">Tempo da contagem:</label>
+                    <select id="countdownTime">
+                        <option value="3">3 segundos</option>
+                        <option value="5" selected>5 segundos</option>
+                        <option value="10">10 segundos</option>
+                    </select>
+                </div>
+
+                <div class="setting-item">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="showImage" checked>
+                        Exibe imagem ao final
+                    </label>
+                    <p class="setting-description">Mostra uma imagem aleatória quando o vencedor remove o dedo</p>
+                </div>
+            </div>
+
+            <!-- Start Game Button -->
+            <div class="start-game-section">
+                <button id="startGameBtn" class="btn btn-primary btn-large">
+                    🚀 Iniciar Jogo
+                </button>
+            </div>
+
+            <!-- Game Info -->
+            <div class="settings-section">
+                <h2>🎯 Como Jogar</h2>
+                <div class="game-info">
+                    <div class="info-item">
+                        <span class="icon">👆</span>
+                        <div>
+                            <h3>Coloque os dedos</h3>
+                            <p>Cada jogador coloca 1 dedo na tela</p>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <span class="icon">⏰</span>
+                        <div>
+                            <h3>Contagem automática</h3>
+                            <p>Com 2+ dedos, a contagem inicia</p>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <span class="icon">🎉</span>
+                        <div>
+                            <h3>Vencedor aleatório</h3>
+                            <p>Um dedo é escolhido como vencedor</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>🎯 Sem anúncios • 📱 Funciona offline • 🎮 Divirta-se!</p>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="../js/settings.js"></script>
+</body>
+</html>

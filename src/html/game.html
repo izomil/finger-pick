@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finger Pick 🎮 - Jogo</title>
+    <meta name="description" content="Jogue Finger Pick - Coloque seus dedos na tela!">
+    <meta name="theme-color" content="#6366f1">
+    
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="../../public/manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Finger Pick">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="../css/styles.css">
+    <link rel="stylesheet" href="../css/game.css">
+    
+    <!-- Icons -->
+    <link rel="apple-touch-icon" href="../assets/icons/icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="../assets/icons/icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="../assets/icons/icon-512x512.png">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <h1>🎮 Finger Pick</h1>
+            <p>Coloque seus dedos na tela e veja quem ganha!</p>
+        </header>
+
+        <!-- Game Area -->
+        <main class="game-area">
+            <canvas id="gameCanvas"></canvas>
+            
+            <!-- Game Controls -->
+            <div class="game-controls">
+                <button id="playBtn" class="btn btn-primary">🎮 Jogar</button>
+                <button id="settingsBtn" class="btn btn-secondary">⚙️ Configurações</button>
+            </div>
+
+            <!-- Game Status -->
+            <div id="gameStatus" class="game-status">
+                <div id="countdown" class="countdown hidden"></div>
+                <div id="winner" class="winner hidden"></div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>🎯 Sem anúncios • 📱 Funciona offline • 🎮 Divirta-se!</p>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="../js/supabase-config.js"></script>
+    <script src="../js/game.js"></script>
+    <script>
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('../../public/sw.js')
+                    .then(registration => console.log('SW registered'))
+                    .catch(error => console.log('SW registration failed'));
+            });
+        }
+        
+        // Initialize Supabase if available
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.SupabaseConfig) {
+                window.SupabaseConfig.initSupabase();
+            }
+        });
+    </script>
+</body>
+</html>

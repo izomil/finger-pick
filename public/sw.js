@@ -2,13 +2,20 @@ const CACHE_NAME = 'finger-pick-v1';
 const urlsToCache = [
     '/',
     '/index.html',
+    '/src/html/settings.html',
+    '/src/html/game.html',
     '/src/css/styles.css',
+    '/src/css/settings.css',
+    '/src/css/game.css',
     '/src/js/game.js',
+    '/src/js/settings.js',
     '/src/js/supabase-config.js',
     '/public/manifest.json',
     '/public/sw.js',
     '/src/assets/icons/icon-192x192.png',
-    '/src/assets/icons/icon-512x512.png'
+    '/src/assets/icons/icon-512x512.png',
+    // Cache images from assets/images folder
+    '/src/assets/images/0000297_lagartixo-pj-masks.webp'
 ];
 
 // Install event - cache resources
@@ -55,7 +62,18 @@ self.addEventListener('fetch', (event) => {
                 }
                 
                 console.log('Fetching from network:', event.request.url);
-                return fetch(event.request).catch(() => {
+                return fetch(event.request).then((networkResponse) => {
+                    // Cache images from assets/images folder
+                    if (event.request.url.includes('/src/assets/images/') && 
+                        networkResponse.ok) {
+                        const responseClone = networkResponse.clone();
+                        caches.open(CACHE_NAME).then((cache) => {
+                            cache.put(event.request, responseClone);
+                            console.log('Cached image:', event.request.url);
+                        });
+                    }
+                    return networkResponse;
+                }).catch(() => {
                     // If network fails and it's a navigation request, return index.html
                     if (event.request.mode === 'navigate') {
                         return caches.match('/index.html');

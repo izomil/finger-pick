@@ -46,23 +46,75 @@ const server = http.createServer((req, res) => {
     // Default to index.html if file doesn't exist
     const fullPath = path.join(__dirname, filePath);
     
-    fs.access(fullPath, fs.constants.F_OK, (err) => {
-        if (err) {
-            // Try index.html for SPA routing
-            const indexPath = path.join(__dirname, 'index.html');
-            fs.access(indexPath, fs.constants.F_OK, (indexErr) => {
-                if (indexErr) {
-                    res.writeHead(404, { 'Content-Type': 'text/plain' });
-                    res.end('File not found');
+    // First check if it's a directory
+    fs.stat(fullPath, (statErr, stats) => {
+        if (!statErr && stats.isDirectory()) {
+            console.log('Directory found, serving listing:', fullPath);
+            serveDirectoryListing(fullPath, res);
+        } else {
+            // Check if it's a file
+            fs.access(fullPath, fs.constants.F_OK, (err) => {
+                if (err) {
+                    console.log('File not found, trying index.html');
+                    // Try index.html for SPA routing
+                    const indexPath = path.join(__dirname, 'index.html');
+                    fs.access(indexPath, fs.constants.F_OK, (indexErr) => {
+                        if (indexErr) {
+                            res.writeHead(404, { 'Content-Type': 'text/plain' });
+                            res.end('File not found');
+                        } else {
+                            serveFile(indexPath, res);
+                        }
+                    });
                 } else {
-                    serveFile(indexPath, res);
+                    console.log('File found, serving:', fullPath);
+                    serveFile(fullPath, res);
                 }
             });
-        } else {
-            serveFile(fullPath, res);
         }
     });
 });
+
+function serveDirectoryListing(dirPath, res) {
+    console.log('Serving directory listing for:', dirPath);
+    
+    fs.readdir(dirPath, (err, files) => {
+        if (err) {
+            console.log('Error reading directory:', err);
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Directory read error: ' + err.message);
+            return;
+        }
+        
+        console.log('Files found:', files);
+        
+        // Generate HTML directory listing
+        const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Directory Listing</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        ul { list-style: none; padding: 0; }
+        li { margin: 5px 0; }
+        a { text-decoration: none; color: #0066cc; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Directory Listing</h1>
+    <ul>
+        ${files.map(file => `<li><a href="${file}">${file}</a></li>`).join('')}
+    </ul>
+</body>
+</html>`;
+        
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(html);
+    });
+}
 
 function serveFile(filePath, res) {
     const ext = path.extname(filePath).toLowerCase();

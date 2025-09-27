@@ -1,57 +1,13 @@
-/* Reset and Base Styles */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+/* Game Page Styles */
 
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    color: white;
-    overflow-x: hidden;
-}
-
-#app {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-    max-width: 100vw;
-}
-
-/* Header */
-.header {
-    text-align: center;
-    padding: 2rem 1rem 1rem;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.header h1 {
-    font-size: 2.5rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.header p {
-    font-size: 1.1rem;
-    opacity: 0.9;
-    font-weight: 300;
-}
-
-/* Game Area */
 .game-area {
     flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 2rem 1rem;
+    padding: 1rem 1rem 2rem 1rem; /* Reduced top padding, kept bottom padding */
     position: relative;
+    gap: 2rem; /* Added gap between canvas and controls */
 }
 
 #gameCanvas {
@@ -70,9 +26,10 @@ body {
 .game-controls {
     display: flex;
     gap: 1rem;
-    margin: 2rem 0;
+    margin: 0; /* Removed margin since we're using gap in parent */
     flex-wrap: wrap;
     justify-content: center;
+    margin-top: auto; /* Push buttons to bottom */
 }
 
 .btn {
@@ -138,49 +95,6 @@ body {
     display: none;
 }
 
-/* Settings */
-.settings {
-    margin-top: 2rem;
-    padding: 1.5rem;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 15px;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.settings label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 600;
-    font-size: 1.1rem;
-}
-
-.settings select {
-    width: 100%;
-    padding: 0.8rem;
-    border: none;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.9);
-    color: #333;
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-}
-
-.settings select:focus {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
-}
-
-/* Footer */
-.footer {
-    text-align: center;
-    padding: 1rem;
-    background: rgba(0, 0, 0, 0.2);
-    font-size: 0.9rem;
-    opacity: 0.8;
-}
-
 /* Animations */
 @keyframes pulse {
     0%, 100% { transform: scale(1); }
@@ -191,11 +105,6 @@ body {
     0% { transform: scale(0.5) rotate(-10deg); opacity: 0; }
     50% { transform: scale(1.2) rotate(5deg); opacity: 1; }
     100% { transform: scale(1) rotate(0deg); opacity: 1; }
-}
-
-@keyframes winnerGlow {
-    0%, 100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
-    50% { box-shadow: 0 0 40px rgba(255, 215, 0, 0.8); }
 }
 
 /* Responsive Design */
@@ -233,12 +142,8 @@ body {
     }
     
     .game-area {
-        padding: 1rem 0.5rem;
-    }
-    
-    .settings {
-        margin-top: 1rem;
-        padding: 1rem;
+        padding: 0.5rem 0.5rem 1rem 0.5rem; /* Reduced top padding, kept bottom */
+        gap: 1.5rem; /* Reduced gap on mobile */
     }
 }
 
@@ -250,36 +155,6 @@ body {
     }
     
     #gameCanvas {
-        min-height: 300px;
+        min-height: 400px; /* Increased from 300px to 400px */
     }
 }
-
-/* Loading styles */
-.loading-area {
-    flex: 1;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 2rem;
-}
-
-.loading-spinner {
-    text-align: center;
-    color: white;
-}
-
-.spinner {
-    width: 50px;
-    height: 50px;
-    border: 4px solid rgba(255, 255, 255, 0.3);
-    border-top: 4px solid white;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 1rem;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
