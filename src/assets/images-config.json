@@ -4,5 +4,6 @@
   "filenamePattern": "img",
   "extension": "jpg",
   "startNumber": 0,
+  "lastSelectedNumber": -1,
   "description": "Configuração das imagens do jogo Finger Pick"
 }

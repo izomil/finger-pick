@@ -665,8 +665,13 @@ class FingerPickGame {
                 const config = await configResponse.json();
                 console.log('JSON carregado:', config.totalImages, 'imagens');
                 
+                // Obter último número selecionado do localStorage se não estiver no JSON
+                if (config.lastSelectedNumber === undefined || config.lastSelectedNumber === null) {
+                    config.lastSelectedNumber = this.getLastSelectedNumber();
+                }
+                
                 // Gerar imagem aleatória baseada na configuração
-                const randomImage = this.generateRandomImageFromConfig(config);
+                const randomImage = await this.generateRandomImageFromConfig(config);
                 const success = await this.tryLoadImageWithFallback(randomImage);
                 
                 if (!success) {
@@ -694,17 +699,57 @@ class FingerPickGame {
         }
     }
     
-    generateRandomImageFromConfig(config) {
-        const { totalImages, basePath, filenamePattern, extension, startNumber } = config;
+    async generateRandomImageFromConfig(config) {
+        const { totalImages, basePath, filenamePattern, extension, startNumber, lastSelectedNumber } = config;
         
-        // Gerar número aleatório entre startNumber e totalImages
-        const randomNumber = Math.floor(Math.random() * totalImages) + startNumber;
+        let randomNumber;
+        let attempts = 0;
+        const maxAttempts = 10; // Evitar loop infinito
+        
+        do {
+            // Gerar número aleatório entre startNumber e totalImages
+            randomNumber = Math.floor(Math.random() * totalImages) + startNumber;
+            attempts++;
+        } while (randomNumber === lastSelectedNumber && attempts < maxAttempts);
         
         // Construir caminho da imagem
         const imagePath = `${basePath}${filenamePattern}${randomNumber}.${extension}`;
         
-        console.log(`Gerando imagem: ${imagePath}`);
+        console.log(`Gerando imagem: ${imagePath} (número: ${randomNumber}, último: ${lastSelectedNumber})`);
+        
+        // Atualizar o JSON com o novo número selecionado
+        await this.updateLastSelectedNumber(randomNumber);
+        
         return imagePath;
+    }
+    
+    async updateLastSelectedNumber(selectedNumber) {
+        try {
+            // Carregar configuração atual
+            const response = await fetch(`src/assets/images-config.json?t=${Date.now()}`);
+            if (response.ok) {
+                const config = await response.json();
+                
+                // Atualizar o número selecionado
+                config.lastSelectedNumber = selectedNumber;
+                
+                // Salvar de volta (simulação - em produção seria via API)
+                console.log(`Atualizando último número selecionado: ${selectedNumber}`);
+                
+                // Armazenar no localStorage como fallback
+                localStorage.setItem('fingerPickLastSelected', selectedNumber.toString());
+            }
+        } catch (error) {
+            console.log('Erro ao atualizar último número selecionado:', error);
+            // Fallback para localStorage
+            localStorage.setItem('fingerPickLastSelected', selectedNumber.toString());
+        }
+    }
+    
+    getLastSelectedNumber() {
+        // Tentar obter do localStorage primeiro
+        const stored = localStorage.getItem('fingerPickLastSelected');
+        return stored ? parseInt(stored) : -1;
     }
     
     async tryLoadImageWithFallback(imagePath) {
@@ -736,8 +781,11 @@ class FingerPickGame {
     }
     
     async loadImagesWithFallback(config) {
+        // Obter último número selecionado do localStorage
+        config.lastSelectedNumber = this.getLastSelectedNumber();
+        
         // Gerar uma imagem aleatória baseada na configuração
-        const randomImage = this.generateRandomImageFromConfig(config);
+        const randomImage = await this.generateRandomImageFromConfig(config);
         
         // Tentar carregar a imagem aleatória
         const success = await this.tryLoadImageWithFallback(randomImage);
