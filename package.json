@@ -1,0 +1,38 @@
+{
+  "name": "finger-pick",
+  "version": "1.0.0",
+  "description": "Um jogo simples onde cada jogador coloca um dedo na tela e um é escolhido aleatoriamente!",
+  "main": "index.html",
+  "scripts": {
+    "start": "node dev-server.js",
+    "dev": "npx live-server --port=3000 --open=/",
+    "serve": "npx serve . -p 3000",
+    "build": "echo 'No build step needed for this PWA'",
+    "deploy": "echo 'Deploy to your preferred hosting service'",
+    "lint": "echo 'No linting configured yet'",
+    "test": "echo 'No tests configured yet'"
+  },
+  "keywords": [
+    "game",
+    "pwa",
+    "mobile",
+    "finger",
+    "touch",
+    "canvas",
+    "offline"
+  ],
+  "author": "Finger Pick Team",
+  "license": "MIT",
+  "devDependencies": {
+    "live-server": "^1.2.2",
+    "serve": "^14.2.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/finger-pick.git"
+  },
+  "homepage": "https://your-username.github.io/finger-pick",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
