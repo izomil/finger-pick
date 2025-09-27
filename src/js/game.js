@@ -281,6 +281,8 @@ class FingerPickGame {
             if (removedFinger.isWinner && this.gameState === 'finished') {
                 console.log('Dedo vencedor removido - mostrando imagem');
                 this.showWinnerImage();
+                // Don't restart game automatically - wait for play button
+                return;
             }
             
             // During counting phase, handle finger removal
@@ -305,6 +307,12 @@ class FingerPickGame {
                 // Keep the finger marking on screen even if finger is removed
                 // Don't actually remove from fingers array during selection
                 return; // Exit early to prevent game logic interference
+            }
+            
+            // During finished state, don't auto-restart - wait for play button
+            if (this.gameState === 'finished') {
+                console.log('Jogo finalizado - aguardando botão Jogar');
+                return;
             }
             
             // Check if we need to pause or continue
@@ -989,10 +997,24 @@ class FingerPickGame {
         this.drawBackground();
         
         // Draw fingers
-        const fingersToDraw = this.gameState === 'selecting' ? this.visualFingers : this.fingers;
-        fingersToDraw.forEach(finger => {
-            this.drawFinger(finger);
-        });
+        if (this.gameState === 'selecting') {
+            // During selection, draw visual fingers
+            this.visualFingers.forEach(finger => {
+                this.drawFinger(finger);
+            });
+        } else if (this.gameState === 'finished') {
+            // During finished state, draw visual fingers to maintain winner marking
+            if (this.visualFingers.length > 0) {
+                this.visualFingers.forEach(finger => {
+                    this.drawFinger(finger);
+                });
+            }
+        } else {
+            // During other states, draw actual fingers
+            this.fingers.forEach(finger => {
+                this.drawFinger(finger);
+            });
+        }
         
         // Draw countdown or instructions
         if (this.gameState === 'counting' && this.countdownInterval) {
