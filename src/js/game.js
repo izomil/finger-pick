@@ -66,21 +66,11 @@ class FingerPickGame {
                         (urlShowImage === null && storedShowImage !== false) ||
                         (storedShowImage === true);
         
-        // Get debug mode from URL params or localStorage
-        const urlDebugMode = urlParams.get('debugMode');
-        const storedDebugMode = storedSettings.debugMode;
-        
-        // Default to false if not specified
-        this.debugMode = (urlDebugMode === 'true') || (storedDebugMode === true);
+        // Debug mode is now controlled only by JSON config file
         
         console.log('Settings loaded:', {
             countdownTime: this.countdownValue,
-            showImage: this.showImage,
-            debugMode: this.debugMode,
-            urlShowImage: urlShowImage,
-            storedShowImage: storedShowImage,
-            urlDebugMode: urlDebugMode,
-            storedDebugMode: storedDebugMode
+            showImage: this.showImage
         });
     }
     
@@ -157,10 +147,7 @@ class FingerPickGame {
         // Test button for debugging (temporary) - disabled for production
         // this.addTestButton();
         
-        // Mobile debug button (temporary)
-        if (this.debugMode) {
-            this.addMobileDebugButton();
-        }
+        // Debug mode is now controlled only by JSON config file
         
         // Prevent context menu on long press
         this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -918,7 +905,7 @@ class FingerPickGame {
         const filenamePattern = config.filenamePattern || 'img';
         const extension = config.extension || 'jpg';
         const lastSelectedNumber = parseInt(config.lastSelectedNumber) || -1;
-        const debug = (config.debug === true) || this.debugMode; // Flag de debug (JSON ou configuração do usuário)
+           const debug = (config.debug === true); // Flag de debug apenas do JSON
         
         if (debug) {
             console.log('Configuração processada:', { totalImages, startNumber, basePath, filenamePattern, extension, lastSelectedNumber, debug });

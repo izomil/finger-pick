@@ -8,7 +8,6 @@ class SettingsController {
     constructor() {
         this.countdownTimeSelect = document.getElementById('countdownTime');
         this.showImageCheckbox = document.getElementById('showImage');
-        this.debugModeCheckbox = document.getElementById('debugMode');
         this.startGameBtn = document.getElementById('startGameBtn');
         
         this.init();
@@ -35,9 +34,6 @@ class SettingsController {
             this.saveSettings();
         });
         
-        this.debugModeCheckbox.addEventListener('change', () => {
-            this.saveSettings();
-        });
     }
     
     loadSettings() {
@@ -47,14 +43,12 @@ class SettingsController {
         // Apply settings to UI
         this.countdownTimeSelect.value = settings.countdownTime || 5;
         this.showImageCheckbox.checked = settings.showImage !== false; // Default to true
-        this.debugModeCheckbox.checked = settings.debugMode === true; // Default to false
     }
     
     saveSettings() {
         const settings = {
             countdownTime: parseInt(this.countdownTimeSelect.value),
-            showImage: this.showImageCheckbox.checked,
-            debugMode: this.debugModeCheckbox.checked
+            showImage: this.showImageCheckbox.checked
         };
         
         // Store settings in localStorage
