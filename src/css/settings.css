@@ -133,8 +133,7 @@
 /* Start Game Section */
 .start-game-section {
     text-align: center;
-    margin-top: 2rem;
-    margin-bottom: 3rem; /* Added more space below the button */
+    margin: 1.5rem 0; /* Reduced margins for better mobile layout */
 }
 
 .btn-large {
@@ -154,15 +153,20 @@
 @media (max-width: 768px) {
     .settings-area {
         padding: 1rem 0.5rem;
+        gap: 1rem; /* Add gap between sections */
     }
     
     .settings-section {
         padding: 1.5rem;
-        margin-bottom: 1.5rem;
+        margin-bottom: 1rem; /* Reduced margin */
     }
     
     .settings-section h2 {
         font-size: 1.3rem;
+    }
+    
+    .start-game-section {
+        margin: 1rem 0; /* Reduced margin for mobile */
     }
     
     .info-item {

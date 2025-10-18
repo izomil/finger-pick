@@ -56,6 +56,7 @@ class FingerPickGame {
         this.countdownValue = parseInt(urlParams.get('countdownTime')) || 
                              parseInt(storedSettings.countdownTime) || 5;
         this.originalCountdownTime = this.countdownValue; // Store original time
+        
         // Get showImage from URL params or localStorage
         const urlShowImage = urlParams.get('showImage');
         const storedShowImage = storedSettings.showImage;
@@ -65,12 +66,21 @@ class FingerPickGame {
                         (urlShowImage === null && storedShowImage !== false) ||
                         (storedShowImage === true);
         
+        // Get debug mode from URL params or localStorage
+        const urlDebugMode = urlParams.get('debugMode');
+        const storedDebugMode = storedSettings.debugMode;
+        
+        // Default to false if not specified
+        this.debugMode = (urlDebugMode === 'true') || (storedDebugMode === true);
+        
         console.log('Settings loaded:', {
             countdownTime: this.countdownValue,
             showImage: this.showImage,
+            debugMode: this.debugMode,
             urlShowImage: urlShowImage,
             storedShowImage: storedShowImage,
-            finalShowImage: this.showImage
+            urlDebugMode: urlDebugMode,
+            storedDebugMode: storedDebugMode
         });
     }
     
@@ -135,6 +145,10 @@ class FingerPickGame {
         
         // Mouse events (for desktop testing)
         this.canvas.addEventListener('mousedown', (e) => this.handleMouse(e));
+        this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+        
+        // Keyboard events for desktop testing
+        document.addEventListener('keydown', (e) => this.handleKeyDown(e));
         
         // Button events
         this.playBtn.addEventListener('click', () => this.resetGame());
@@ -186,9 +200,54 @@ class FingerPickGame {
         this.addFinger(x, y, 'mouse');
     }
     
+    handleMouseUp(e) {
+        // Remove mouse finger when mouse is released
+        const mouseFingerIndex = this.fingers.findIndex(f => f.id === 'mouse');
+        if (mouseFingerIndex !== -1) {
+            this.removeFinger('mouse');
+        }
+    }
+    
+    handleKeyDown(e) {
+        console.log('Tecla pressionada:', e.code, 'Estado do jogo:', this.gameState);
+        
+        // Only allow keyboard input during waiting and counting states
+        if (this.gameState === 'finished') {
+            console.log('Jogo finalizado - teclas desabilitadas');
+            return;
+        }
+        
+        // Add finger with keyboard (Space, Enter, or number keys 1-9)
+        if (e.code === 'Space' || e.code === 'Enter' || 
+            (e.code >= 'Digit1' && e.code <= 'Digit9')) {
+            e.preventDefault();
+            
+            // Generate random position for keyboard finger
+            const x = Math.random() * (this.canvas.width - 100) + 50;
+            const y = Math.random() * (this.canvas.height - 100) + 50;
+            
+            const fingerId = `keyboard-${e.code}`;
+            console.log(`Tecla ${e.code} pressionada: x=${x}, y=${y}, fingerId=${fingerId}`);
+            this.addFinger(x, y, fingerId);
+        }
+        
+        // Remove all fingers with Escape key
+        if (e.code === 'Escape') {
+            e.preventDefault();
+            console.log('ESC pressionado - removendo todos os dedos');
+            this.fingers = [];
+            this.draw();
+        }
+    }
+    
     addFinger(x, y, id) {
+        console.log(`Tentando adicionar dedo: id=${id}, x=${x}, y=${y}, estado=${this.gameState}`);
+        
         // Check if finger already exists (prevent multiple touches from same finger)
-        if (this.fingers.find(f => f.id === id)) return;
+        if (this.fingers.find(f => f.id === id)) {
+            console.log(`Dedo com ID ${id} já existe, ignorando`);
+            return;
+        }
         
         const color = this.colors[this.fingers.length % this.colors.length];
         const finger = {
@@ -203,6 +262,7 @@ class FingerPickGame {
         };
         
         this.fingers.push(finger);
+        console.log(`Dedo adicionado com sucesso. Total de dedos: ${this.fingers.length}`);
         this.draw();
         
         // Haptic feedback if available
@@ -663,7 +723,13 @@ class FingerPickGame {
             
             if (configResponse.ok) {
                 const config = await configResponse.json();
-                console.log('JSON carregado:', config.totalImages, 'imagens');
+                console.log('JSON carregado com sucesso:', config);
+                console.log(`Total de imagens configurado: ${config.totalImages}`);
+                
+                // Verificar se a configuração está correta
+                if (config.totalImages && config.totalImages > 0) {
+                    console.log(`Range esperado: [${config.startNumber || 0}, complemento: ${(config.startNumber || 0) + config.totalImages - 1}]`);
+                }
                 
                 // Obter último número selecionado do localStorage se não estiver no JSON
                 if (config.lastSelectedNumber === undefined || config.lastSelectedNumber === null) {
@@ -671,56 +737,94 @@ class FingerPickGame {
                 }
                 
                 // Gerar imagem aleatória baseada na configuração
-                const randomImage = await this.generateRandomImageFromConfig(config);
-                const success = await this.tryLoadImageWithFallback(randomImage);
+                const result = await this.generateRandomImageFromConfig(config);
+                const success = await this.tryLoadImageWithFallback(result.imagePath, result.randomNumber);
                 
                 if (!success) {
                     this.loadImagesWithFallback(config);
                 }
             } else {
-                console.log('Erro ao carregar JSON, usando fallback com 18 imagens');
+                console.log('Erro ao carregar JSON, usando fallback com 4 imagens');
                 this.loadImagesWithFallback({
-                    totalImages: 18,
+                    totalImages: 4,
                     basePath: 'src/assets/images/',
                     filenamePattern: 'img',
                     extension: 'jpg',
-                    startNumber: 0
+                    startNumber: 0,
+                    debug: false
                 });
             }
         } catch (error) {
-            console.log('Erro ao carregar JSON, usando fallback com 18 imagens');
+            console.log('Erro ao carregar JSON, usando fallback com 4 imagens');
             this.loadImagesWithFallback({
-                totalImages: 18,
+                totalImages: 4,
                 basePath: 'src/assets/images/',
                 filenamePattern: 'img',
                 extension: 'jpg',
-                startNumber: 0
+                startNumber: 0,
+                debug: false
             });
         }
     }
     
     async generateRandomImageFromConfig(config) {
-        const { totalImages, basePath, filenamePattern, extension, startNumber, lastSelectedNumber } = config;
+        // Garantir que temos valores válidos
+        const totalImages = parseInt(config.totalImages) || 4;
+        const startNumber = parseInt(config.startNumber) || 0;
+        const basePath = config.basePath || 'src/assets/images/';
+        const filenamePattern = config.filenamePattern || 'img';
+        const extension = config.extension || 'jpg';
+        const lastSelectedNumber = parseInt(config.lastSelectedNumber) || -1;
+        const debug = (config.debug === true) || this.debugMode; // Flag de debug (JSON ou configuração do usuário)
+        
+        if (debug) {
+            console.log('Configuração processada:', { totalImages, startNumber, basePath, filenamePattern, extension, lastSelectedNumber, debug });
+            console.log(`Range válido: [${startNumber}, ${startNumber + totalImages - 1}]`);
+        }
         
         let randomNumber;
         let attempts = 0;
         const maxAttempts = 10; // Evitar loop infinito
         
         do {
-            // Gerar número aleatório entre startNumber e totalImages
+            // Gerar número aleatório entre startNumber e (startNumber + totalImages - 1)
+            // Com totalImages=4 e startNumber=0, deve gerar 0, 1, 2, 3
             randomNumber = Math.floor(Math.random() * totalImages) + startNumber;
             attempts++;
+            
+            if (debug) {
+                console.log(`Tentativa ${attempts}: totalImages=${totalImages}, startNumber=${startNumber}, número gerado = ${randomNumber}, último selecionado = ${lastSelectedNumber}`);
+            }
+            
+            // Verificação de segurança para garantir que o número está no range correto
+            if (randomNumber < startNumber || randomNumber >= startNumber + totalImages) {
+                console.error(`ERRO CRÍTICO: Número ${randomNumber} fora do range [${startNumber}, ${startNumber + totalImages - 1}]`);
+                console.error('Forçando número para o range válido...');
+                randomNumber = Math.max(startNumber, Math.min(randomNumber, startNumber + totalImages - 1));
+            }
         } while (randomNumber === lastSelectedNumber && attempts < maxAttempts);
+        
+        if (debug) {
+            console.log(`✅ Número final validado: ${randomNumber} (range: [${startNumber}, ${startNumber + totalImages - 1}])`);
+        }
+        
+        // Mostrar o número sorteado na tela apenas se debug estiver ativo
+        if (debug) {
+            this.showImageNumberOnScreen(randomNumber);
+        }
         
         // Construir caminho da imagem
         const imagePath = `${basePath}${filenamePattern}${randomNumber}.${extension}`;
         
-        console.log(`Gerando imagem: ${imagePath} (número: ${randomNumber}, último: ${lastSelectedNumber})`);
+        if (debug) {
+            console.log(`Imagem final gerada: ${imagePath} (número: ${randomNumber}, último: ${lastSelectedNumber})`);
+        }
         
         // Atualizar o localStorage com o novo número selecionado
         await this.updateLastSelectedNumber(randomNumber);
         
-        return imagePath;
+        // Retornar tanto o caminho quanto o número para exibir na tela
+        return { imagePath, randomNumber };
     }
     
     async updateLastSelectedNumber(selectedNumber) {
@@ -750,7 +854,9 @@ class FingerPickGame {
         return stored ? parseInt(stored) : -1;
     }
     
-    async tryLoadImageWithFallback(imagePath) {
+    async tryLoadImageWithFallback(imagePath, imageNumber = null) {
+        console.log('Tentando carregar imagem:', imagePath);
+        
         const basePaths = [
             '', // Caminho relativo atual
             '../', // Um nível acima
@@ -762,19 +868,22 @@ class FingerPickGame {
         // Tentar cada caminho base até encontrar a imagem
         for (const basePathPrefix of basePaths) {
             const fullPath = basePathPrefix + imagePath;
+            console.log(`Testando caminho: ${fullPath}`);
             
             try {
                 const exists = await this.testImageExists(fullPath);
+                console.log(`Resultado do teste: ${exists ? 'SUCESSO' : 'FALHA'} para ${fullPath}`);
                 if (exists) {
                     console.log(`Imagem encontrada: ${fullPath}`);
-                    this.createImageModal(fullPath);
+                    this.createImageModal(fullPath, imageNumber);
                     return true;
                 }
             } catch (error) {
-                // Silenciar erros de teste de imagem
+                console.log(`Erro ao testar ${fullPath}:`, error);
             }
         }
         
+        console.log('Nenhuma imagem encontrada em todos os caminhos testados');
         return false;
     }
     
@@ -783,10 +892,10 @@ class FingerPickGame {
         config.lastSelectedNumber = this.getLastSelectedNumber();
         
         // Gerar uma imagem aleatória baseada na configuração
-        const randomImage = await this.generateRandomImageFromConfig(config);
+        const result = await this.generateRandomImageFromConfig(config);
         
         // Tentar carregar a imagem aleatória
-        const success = await this.tryLoadImageWithFallback(randomImage);
+        const success = await this.tryLoadImageWithFallback(result.imagePath, result.randomNumber);
         
         if (!success) {
             this.showDefaultMessage();
@@ -991,8 +1100,23 @@ class FingerPickGame {
         });
     }
     
-    createImageModal(imageUrl) {
-        console.log('createImageModal chamado com:', imageUrl);
+    showImageNumberOnScreen(imageNumber) {
+        // Create or update the image number display on canvas
+        this.imageNumberDisplay = {
+            number: imageNumber,
+            startTime: Date.now(),
+            duration: 3000, // Show for 3 seconds
+            visible: true
+        };
+        
+        console.log(`Número da imagem sorteado: ${imageNumber}`);
+        
+        // Redraw to show the number
+        this.draw();
+    }
+    
+    createImageModal(imageUrl, imageNumber = null) {
+        console.log('createImageModal chamado com:', imageUrl, 'número:', imageNumber);
         
         // Check if modal already exists and remove it
         const existingModal = document.querySelector('.image-modal');
@@ -1025,6 +1149,7 @@ class FingerPickGame {
             text-align: center;
         `;
         
+        
         const img = document.createElement('img');
         img.src = imageUrl;
         img.style.cssText = `
@@ -1055,7 +1180,6 @@ class FingerPickGame {
         `;
         closeText.textContent = 'Clique para fechar';
         
-        imageContainer.appendChild(img);
         imageContainer.appendChild(closeText);
         modal.appendChild(imageContainer);
         document.body.appendChild(modal);
@@ -1189,6 +1313,11 @@ class FingerPickGame {
             this.drawWaitingMessage();
         } else if (this.fingers.length === 0) {
             this.drawInstructions();
+        }
+        
+        // Draw image number display if visible
+        if (this.imageNumberDisplay && this.imageNumberDisplay.visible) {
+            this.drawImageNumberDisplay();
         }
     }
     
@@ -1400,6 +1529,48 @@ class FingerPickGame {
         this.ctx.fillText('⏸️ Aguardando jogadores...', centerX, centerY);
     }
     
+    drawImageNumberDisplay() {
+        const elapsed = Date.now() - this.imageNumberDisplay.startTime;
+        const progress = elapsed / this.imageNumberDisplay.duration;
+        
+        // Hide if time is up
+        if (progress >= 1) {
+            this.imageNumberDisplay.visible = false;
+            return;
+        }
+        
+        // Fade out effect
+        const alpha = 1 - (progress * 0.3); // Fade to 70% opacity
+        
+        const centerX = this.canvas.width / 2;
+        const topY = 80;
+        
+        // Background rectangle (smaller and less intrusive)
+        this.ctx.fillStyle = `rgba(0, 0, 0, ${0.7 * alpha})`;
+        this.ctx.beginPath();
+        this.ctx.roundRect(centerX - 60, topY - 25, 120, 50, 10);
+        this.ctx.fill();
+        
+        // Border
+        this.ctx.strokeStyle = `rgba(255, 107, 107, ${alpha})`;
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.roundRect(centerX - 60, topY - 25, 120, 50, 10);
+        this.ctx.stroke();
+        
+        // Number text (smaller)
+        this.ctx.fillStyle = `rgba(255, 107, 107, ${alpha})`;
+        this.ctx.font = 'bold 24px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(`Img: ${this.imageNumberDisplay.number}`, centerX, topY);
+        
+        // Range info (small text)
+        this.ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
+        this.ctx.font = 'bold 12px Arial';
+        this.ctx.fillText('(0-3)', centerX, topY + 20);
+    }
+    
     drawInstructions() {
         this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
         this.ctx.font = 'bold 24px Arial';
@@ -1409,21 +1580,27 @@ class FingerPickGame {
         const centerX = this.canvas.width / 2;
         const centerY = this.canvas.height / 2;
         
-        this.ctx.fillText('👆 Coloque 2+ dedos', centerX, centerY - 40);
-        this.ctx.fillText('na tela para começar!', centerX, centerY - 10);
+        this.ctx.fillText('👆 Coloque 2+ dedos', centerX, centerY - 60);
+        this.ctx.fillText('na tela para começar!', centerX, centerY - 30);
         
         // Show current finger count
         if (this.fingers.length > 0) {
             this.ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             this.ctx.font = 'bold 18px Arial';
-            this.ctx.fillText(`${this.fingers.length} dedo(s) - Precisa de ${this.minFingersToStart}`, centerX, centerY + 20);
+            this.ctx.fillText(`${this.fingers.length} dedo(s) - Precisa de ${this.minFingersToStart}`, centerX, centerY + 10);
         }
+        
+        // Show keyboard instructions
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        this.ctx.font = 'bold 14px Arial';
+        this.ctx.fillText('💻 PC: Use ESPAÇO, ENTER ou teclas 1-9', centerX, centerY + 40);
+        this.ctx.fillText('📱 Mobile: Toque na tela', centerX, centerY + 65);
         
         // Draw example circles
         const exampleColors = ['#ff6b6b', '#4ecdc4', '#45b7d1'];
         exampleColors.forEach((color, index) => {
             const x = centerX - 60 + (index * 60);
-            const y = centerY + 80;
+            const y = centerY + 100;
             
             this.ctx.fillStyle = color;
             this.ctx.beginPath();
