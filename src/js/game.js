@@ -678,9 +678,9 @@ class FingerPickGame {
                     this.loadImagesWithFallback(config);
                 }
             } else {
-                console.log('Erro ao carregar JSON, usando fallback com 13 imagens');
+                console.log('Erro ao carregar JSON, usando fallback com 18 imagens');
                 this.loadImagesWithFallback({
-                    totalImages: 13,
+                    totalImages: 18,
                     basePath: 'src/assets/images/',
                     filenamePattern: 'img',
                     extension: 'jpg',
@@ -688,9 +688,9 @@ class FingerPickGame {
                 });
             }
         } catch (error) {
-            console.log('Erro ao carregar JSON, usando fallback com 13 imagens');
+            console.log('Erro ao carregar JSON, usando fallback com 18 imagens');
             this.loadImagesWithFallback({
-                totalImages: 13,
+                totalImages: 18,
                 basePath: 'src/assets/images/',
                 filenamePattern: 'img',
                 extension: 'jpg',
@@ -717,7 +717,7 @@ class FingerPickGame {
         
         console.log(`Gerando imagem: ${imagePath} (número: ${randomNumber}, último: ${lastSelectedNumber})`);
         
-        // Atualizar o JSON com o novo número selecionado
+        // Atualizar o localStorage com o novo número selecionado
         await this.updateLastSelectedNumber(randomNumber);
         
         return imagePath;
@@ -725,18 +725,16 @@ class FingerPickGame {
     
     async updateLastSelectedNumber(selectedNumber) {
         try {
-            // Carregar configuração atual
+            // Carregar configuração atual do JSON
             const response = await fetch(`src/assets/images-config.json?t=${Date.now()}`);
             if (response.ok) {
                 const config = await response.json();
                 
-                // Atualizar o número selecionado
+                // Atualizar o número selecionado no JSON (para referência)
                 config.lastSelectedNumber = selectedNumber;
                 
-                // Salvar de volta (simulação - em produção seria via API)
+                // Salvar no localStorage como backup
                 console.log(`Atualizando último número selecionado: ${selectedNumber}`);
-                
-                // Armazenar no localStorage como fallback
                 localStorage.setItem('fingerPickLastSelected', selectedNumber.toString());
             }
         } catch (error) {
@@ -747,7 +745,7 @@ class FingerPickGame {
     }
     
     getLastSelectedNumber() {
-        // Tentar obter do localStorage primeiro
+        // Obter o último número selecionado do localStorage
         const stored = localStorage.getItem('fingerPickLastSelected');
         return stored ? parseInt(stored) : -1;
     }
@@ -761,7 +759,7 @@ class FingerPickGame {
             './' // Caminho relativo explícito
         ];
         
-        // Tentar cada caminho base
+        // Tentar cada caminho base até encontrar a imagem
         for (const basePathPrefix of basePaths) {
             const fullPath = basePathPrefix + imagePath;
             
@@ -829,12 +827,12 @@ class FingerPickGame {
         modal.appendChild(messageContainer);
         document.body.appendChild(modal);
         
-        // Auto-close after 3 seconds
+        // Fechar automaticamente após 3 segundos
         setTimeout(() => {
             if (modal.parentNode) modal.remove();
         }, 3000);
         
-        // Close on click
+        // Fechar ao clicar
         modal.onclick = () => modal.remove();
     }
     
