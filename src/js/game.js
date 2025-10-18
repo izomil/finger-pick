@@ -742,6 +742,77 @@ class FingerPickGame {
         window.location.reload(true);
     }
     
+    clearAllCache() {
+        // Limpar TODO o cache ao iniciar novo jogo
+        console.log('🧹 LIMPANDO TODO O CACHE...');
+        
+        // 1. Limpar localStorage
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.includes('fingerPick')) {
+                keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach(key => {
+            localStorage.removeItem(key);
+            console.log('LocalStorage removido:', key);
+        });
+        
+        // 2. Limpar sessionStorage
+        const sessionKeysToRemove = [];
+        for (let i = 0; i < sessionStorage.length; i++) {
+            const key = sessionStorage.key(i);
+            if (key && key.includes('fingerPick')) {
+                sessionKeysToRemove.push(key);
+            }
+        }
+        sessionKeysToRemove.forEach(key => {
+            sessionStorage.removeItem(key);
+            console.log('SessionStorage removido:', key);
+        });
+        
+        // 3. Limpar cache do navegador
+        if ('caches' in window) {
+            caches.keys().then(names => {
+                console.log('Caches encontrados:', names);
+                names.forEach(name => {
+                    // Limpar todos os caches relacionados ao projeto
+                    if (name.includes('images-config') || 
+                        name.includes('finger-pick') || 
+                        name.includes('images') ||
+                        name.includes('assets') ||
+                        name.includes('game') ||
+                        name.includes('src')) {
+                        caches.delete(name);
+                        console.log('Cache removido:', name);
+                    }
+                });
+            }).catch(error => {
+                console.log('Erro ao limpar caches:', error);
+            });
+        }
+        
+        // 4. Limpar service workers
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(registrations => {
+                registrations.forEach(registration => {
+                    registration.unregister();
+                    console.log('Service Worker removido:', registration.scope);
+                });
+            }).catch(error => {
+                console.log('Erro ao remover service workers:', error);
+            });
+        }
+        
+        // 5. Limpar cache de imagens do navegador
+        if ('clearImageCache' in window) {
+            window.clearImageCache();
+        }
+        
+        console.log('✅ CACHE COMPLETAMENTE LIMPO!');
+    }
+    
     clearImageCache() {
         // Limpar cache relacionado a imagens se necessário
         console.log('Limpando cache de imagens...');
@@ -1326,6 +1397,9 @@ class FingerPickGame {
     
     resetGame() {
         console.log('Resetando jogo...');
+        
+        // LIMPAR TODO O CACHE ao iniciar novo jogo
+        this.clearAllCache();
         
         // Clear any running intervals
         if (this.countdownInterval) {
