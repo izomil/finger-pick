@@ -157,6 +157,11 @@ class FingerPickGame {
         // Test button for debugging (temporary) - disabled for production
         // this.addTestButton();
         
+        // Mobile debug button (temporary)
+        if (this.debugMode) {
+            this.addMobileDebugButton();
+        }
+        
         // Prevent context menu on long press
         this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     }
@@ -712,23 +717,90 @@ class FingerPickGame {
         console.log('showRandomImage chamado');
         console.log('Carregando configuração de imagens...');
         
+        // Limpar cache do localStorage se necessário
+        this.clearImageCache();
+        
         // Load images using configuration file
         this.loadImagesFromConfig();
     }
     
+    forceReloadForMobile() {
+        // Função para forçar reload no mobile se necessário
+        console.log('Forçando reload para mobile...');
+        
+        // Limpar todos os caches possíveis
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(registrations => {
+                registrations.forEach(registration => {
+                    registration.unregister();
+                    console.log('Service Worker removido');
+                });
+            });
+        }
+        
+        // Recarregar a página
+        window.location.reload(true);
+    }
+    
+    clearImageCache() {
+        // Limpar cache relacionado a imagens se necessário
+        console.log('Limpando cache de imagens...');
+        
+        // Limpar localStorage para forçar recarregamento
+        localStorage.removeItem('fingerPickLastSelected');
+        localStorage.removeItem('fingerPickSettings');
+        
+        // Limpar cache do navegador se possível (mobile)
+        if ('caches' in window) {
+            caches.keys().then(names => {
+                names.forEach(name => {
+                    // Limpar todos os caches relacionados ao projeto
+                    if (name.includes('images-config') || 
+                        name.includes('finger-pick') || 
+                        name.includes('images') ||
+                        name.includes('assets')) {
+                        caches.delete(name);
+                        console.log('Cache removido:', name);
+                    }
+                });
+            });
+        }
+        
+        // Limpar cache de imagens do navegador se possível
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(registrations => {
+                registrations.forEach(registration => {
+                    if (registration.scope.includes('finger-pick')) {
+                        registration.unregister();
+                        console.log('Service Worker removido para limpar cache');
+                    }
+                });
+            });
+        }
+    }
+    
     async loadImagesFromConfig() {
         try {
-            // Tentar carregar configuração
-            const configResponse = await fetch(`src/assets/images-config.json?t=${Date.now()}`);
+            // Cache busting mais agressivo
+            const cacheBuster = `${Date.now()}_${Math.random()}`;
+            const configResponse = await fetch(`src/assets/images-config.json?t=${cacheBuster}&v=${cacheBuster}`, {
+                cache: 'no-store',
+                headers: {
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
+                }
+            });
             
             if (configResponse.ok) {
                 const config = await configResponse.json();
-                console.log('JSON carregado com sucesso:', config);
+                console.log('JSON carregado com sucesso (sem cache):', config);
                 console.log(`Total de imagens configurado: ${config.totalImages}`);
+                console.log(`Cache busting usado: ${cacheBuster}`);
                 
                 // Verificar se a configuração está correta
                 if (config.totalImages && config.totalImages > 0) {
-                    console.log(`Range esperado: [${config.startNumber || 0}, complemento: ${(config.startNumber || 0) + config.totalImages - 1}]`);
+                    console.log(`Range esperado: [${config.startNumber || 0}, ${(config.startNumber || 0) + config.totalImages - 1}]`);
                 }
                 
                 // Obter último número selecionado do localStorage se não estiver no JSON
@@ -744,9 +816,9 @@ class FingerPickGame {
                     this.loadImagesWithFallback(config);
                 }
             } else {
-                console.log('Erro ao carregar JSON, usando fallback com 4 imagens');
+                console.log('Erro ao carregar JSON, usando fallback com 13 imagens');
                 this.loadImagesWithFallback({
-                    totalImages: 4,
+                    totalImages: 13,
                     basePath: 'src/assets/images/',
                     filenamePattern: 'img',
                     extension: 'jpg',
@@ -755,9 +827,9 @@ class FingerPickGame {
                 });
             }
         } catch (error) {
-            console.log('Erro ao carregar JSON, usando fallback com 4 imagens');
+            console.log('Erro ao carregar JSON, usando fallback com 13 imagens:', error);
             this.loadImagesWithFallback({
-                totalImages: 4,
+                totalImages: 13,
                 basePath: 'src/assets/images/',
                 filenamePattern: 'img',
                 extension: 'jpg',
@@ -769,7 +841,7 @@ class FingerPickGame {
     
     async generateRandomImageFromConfig(config) {
         // Garantir que temos valores válidos
-        const totalImages = parseInt(config.totalImages) || 4;
+        const totalImages = parseInt(config.totalImages) || 13;
         const startNumber = parseInt(config.startNumber) || 0;
         const basePath = config.basePath || 'src/assets/images/';
         const filenamePattern = config.filenamePattern || 'img';
@@ -829,8 +901,11 @@ class FingerPickGame {
     
     async updateLastSelectedNumber(selectedNumber) {
         try {
-            // Carregar configuração atual do JSON
-            const response = await fetch(`src/assets/images-config.json?t=${Date.now()}`);
+            // Cache busting para carregar configuração atual
+            const cacheBuster = `${Date.now()}_${Math.random()}`;
+            const response = await fetch(`src/assets/images-config.json?t=${cacheBuster}`, {
+                cache: 'no-store'
+            });
             if (response.ok) {
                 const config = await response.json();
                 
@@ -857,6 +932,9 @@ class FingerPickGame {
     async tryLoadImageWithFallback(imagePath, imageNumber = null) {
         console.log('Tentando carregar imagem:', imagePath);
         
+        // Cache busting para imagens também
+        const imageCacheBuster = `?t=${Date.now()}&v=${Math.random()}`;
+        
         const basePaths = [
             '', // Caminho relativo atual
             '../', // Um nível acima
@@ -867,8 +945,8 @@ class FingerPickGame {
         
         // Tentar cada caminho base até encontrar a imagem
         for (const basePathPrefix of basePaths) {
-            const fullPath = basePathPrefix + imagePath;
-            console.log(`Testando caminho: ${fullPath}`);
+            const fullPath = basePathPrefix + imagePath + imageCacheBuster;
+            console.log(`Testando caminho com cache busting: ${fullPath}`);
             
             try {
                 const exists = await this.testImageExists(fullPath);
@@ -967,6 +1045,32 @@ class FingerPickGame {
             this.showRandomImage();
         };
         document.body.appendChild(testBtn);
+    }
+    
+    addMobileDebugButton() {
+        // Botão de debug específico para mobile
+        const debugBtn = document.createElement('button');
+        debugBtn.textContent = '🔄 Limpar Cache';
+        debugBtn.style.cssText = `
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: #4ecdc4;
+            color: white;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        `;
+        debugBtn.onclick = () => {
+            console.log('Botão de debug mobile clicado');
+            this.forceReloadForMobile();
+        };
+        document.body.appendChild(debugBtn);
     }
     
     
@@ -1069,34 +1173,25 @@ class FingerPickGame {
     
     async testImageExists(imagePath) {
         return new Promise((resolve) => {
-            // First check if image is in cache
-            if ('caches' in window) {
-                caches.match(imagePath).then((cachedResponse) => {
-                    if (cachedResponse) {
-                        console.log('Imagem encontrada no cache:', imagePath);
-                        resolve(true);
-                        return;
-                    }
-                    
-                    // If not in cache, test by loading the image
-                    const testImg = new Image();
-                    testImg.onload = () => {
-                        console.log('Imagem encontrada na rede:', imagePath);
-                        resolve(true);
-                    };
-                    testImg.onerror = () => {
-                        console.log('Imagem não encontrada:', imagePath);
-                        resolve(false);
-                    };
-                    testImg.src = imagePath;
-                });
-            } else {
-                // Fallback for browsers without cache API
-                const testImg = new Image();
-                testImg.onload = () => resolve(true);
-                testImg.onerror = () => resolve(false);
-                testImg.src = imagePath;
+            // Skip cache check and always test by loading the image directly
+            // This ensures we get the latest version
+            const testImg = new Image();
+            testImg.onload = () => {
+                console.log('Imagem encontrada na rede:', imagePath);
+                resolve(true);
+            };
+            testImg.onerror = () => {
+                console.log('Imagem não encontrada:', imagePath);
+                resolve(false);
+            };
+            
+            // Force reload by adding cache busting if not already present
+            let finalPath = imagePath;
+            if (!imagePath.includes('?t=')) {
+                finalPath = imagePath + `?t=${Date.now()}`;
             }
+            
+            testImg.src = finalPath;
         });
     }
     
